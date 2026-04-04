@@ -379,7 +379,7 @@
       const origHTML = amp2Btn.innerHTML;
       try{
         const raw=await extractCurrentPageText();
-        const prefixed=`Amp2 explain this: ${raw}`;
+        const prefixed=`amplify this, put the amplification within square brackets: ${raw}`;
         await navigator.clipboard.writeText(prefixed);
         window.open(`https://chat.openai.com/?q=${encodeURIComponent(prefixed)}`,"_blank","noopener");
         amp2Btn.classList.remove("btn-accent"); amp2Btn.classList.add("btn-outline");
