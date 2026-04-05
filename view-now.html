@@ -63,6 +63,24 @@
       background:#1c313a; color:#b2dfdb; border:1px solid rgba(255,255,255,.06);
       letter-spacing:.2px;
     }
+
+    /* Seen pill */
+    .pill-seen{
+      background: rgba(124,179,66,.14);
+      color: #c5e1a5;
+      border: 1px solid rgba(124,179,66,.35);
+      margin-left: .4rem;
+      vertical-align: middle;
+    }
+
+    .pill-unseen{
+      background: rgba(144,164,174,.10);
+      color: #b0bec5;
+      border: 1px solid rgba(144,164,174,.22);
+      margin-left: .4rem;
+      vertical-align: middle;
+    }
+
     code{background:#0f1519; padding:0 .35rem; border-radius:.3rem; color:#d8e6df;}
 
     /* Info row */
@@ -121,7 +139,13 @@
         <span class="sep">|</span>
         <div><b>Pages:</b> <span id="count" class="small">—</span></div>
         <span class="sep">|</span>
-        <div><b>Current page:</b> <span id="currentPage" class="small">—</span></div>
+        <div>
+          <b>Current page:</b>
+          <span id="currentPage" class="small">—</span>
+          <span id="seenBadge" class="pill pill-unseen">Unseen</span>
+        </div>
+        <span class="sep">|</span>
+        <div><b>Seen count:</b> <span id="seenCount" class="small">0 / 0</span></div>
       </div>
 
       <div class="actions">
@@ -153,6 +177,8 @@
     const prevBtn = $("#prevPageBtn");
     const nextBtn = $("#nextPageBtn");
     const shareBtn = $("#shareLinkBtn");
+    const seenBadge = $("#seenBadge");
+    const seenCountEl = $("#seenCount");
     const canvas = $("#pdfCanvas"), ctx = canvas.getContext("2d");
 
     function hasCrypto(){ return typeof crypto !== 'undefined' && crypto?.getRandomValues; }
@@ -170,6 +196,55 @@
       if(kind === "ok"){ statusEl.style.background = "#1c313a"; statusEl.style.color = "#b2dfdb"; }
       else if(kind === "err"){ statusEl.style.background = "rgba(229,57,53,.15)"; statusEl.style.color = "#ffb4af"; }
       else { statusEl.style.background = "#1c313a"; statusEl.style.color = "#b2dfdb"; }
+    }
+
+    /* ===== Seen tracking ===== */
+    const SEEN_PREFIX = "pdfSeen:";
+
+    function getSeenKey(fileName, pageNumber){
+      return `${SEEN_PREFIX}${fileName}::${pageNumber}`;
+    }
+
+    function hasSeenPage(fileName, pageNumber){
+      try{
+        return localStorage.getItem(getSeenKey(fileName, pageNumber)) === "1";
+      }catch{
+        return false;
+      }
+    }
+
+    function markPageSeen(fileName, pageNumber){
+      try{
+        localStorage.setItem(getSeenKey(fileName, pageNumber), "1");
+      }catch(e){
+        console.warn("Could not persist seen state:", e);
+      }
+    }
+
+    function updateSeenBadge(fileName, pageNumber){
+      const seen = hasSeenPage(fileName, pageNumber);
+      seenBadge.textContent = seen ? "Seen" : "Unseen";
+      seenBadge.classList.toggle("pill-seen", seen);
+      seenBadge.classList.toggle("pill-unseen", !seen);
+    }
+
+    function getSeenCount(fileName, totalPages){
+      let count = 0;
+      try{
+        for(let i = 1; i <= totalPages; i++){
+          if(localStorage.getItem(getSeenKey(fileName, i)) === "1"){
+            count++;
+          }
+        }
+      }catch(e){
+        console.warn("Could not compute seen count:", e);
+      }
+      return count;
+    }
+
+    function updateSeenCount(fileName, totalPages){
+      const seenCount = getSeenCount(fileName, totalPages);
+      seenCountEl.textContent = `${seenCount} / ${totalPages}`;
     }
 
     /* ===== Params ===== */
@@ -308,6 +383,18 @@
 
       if (loadedFileName) {
         updateUrl(loadedFileName, current);
+
+        // Show whether this page had already been seen BEFORE this render
+        updateSeenBadge(loadedFileName, current);
+
+        // Then mark it as seen now that it has been viewed
+        markPageSeen(loadedFileName, current);
+
+        // Refresh badge so first-time views immediately become Seen after display
+        updateSeenBadge(loadedFileName, current);
+
+        // Update seen count for this PDF
+        updateSeenCount(loadedFileName, total);
       }
 
       updateNavButtons();
@@ -337,14 +424,17 @@
       fileEl.textContent = safe;
       countEl.textContent = total;
 
+      // initialize seen count immediately
+      updateSeenCount(safe, total);
+
       // Determine starting page: URL param or Random
       let startPage = parseInt(rawPage, 10);
-      
+
       // If startPage is invalid (NaN, 0, or out of bounds), fallback to random
       if(!startPage || isNaN(startPage) || startPage < 1 || startPage > total) {
         startPage = randomInt(1, total);
       }
-      
+
       await renderPage(startPage);
     }
 
@@ -457,6 +547,9 @@
           fileEl.textContent = "—";
           countEl.textContent = "—";
           currentEl.textContent = "—";
+          seenBadge.textContent = "Unseen";
+          seenBadge.classList.add("pill-unseen");
+          seenCountEl.textContent = "0 / 0";
           updateNavButtons();
           return;
         }
